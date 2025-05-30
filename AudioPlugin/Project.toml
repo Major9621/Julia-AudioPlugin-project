@@ -1,0 +1,4 @@
+name = "AudioPlugin"
+uuid = "761b5105-41af-4b38-816d-c7a93dd9d0cc"
+authors = ["MajorLimitowny <61584060+MajorLimitowny@users.noreply.github.com>"]
+version = "0.1.0"
