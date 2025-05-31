@@ -1,7 +1,13 @@
 module AudioPlugin
 
-greet() = println("Hello World!")
+using FFTW, Plots, DSP, PlutoUI, WAV, FileIO, WebIO, OffsetArrays
 
-greet()
+export greet
+
+
+function greet()
+    println("Hello from AudioPlugin!")
+end
+
 
 end # module AudioPlugin
