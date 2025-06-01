@@ -40,14 +40,12 @@ function compare_audio_files(path_1::String, path_2::String)
     plot(p1, p2, layout=(2, 1), size=(800, 600))
 end
 
-
 function visualize_frequency_spectrum(file_path::String)
     audio_data = wavread(file_path)
     signal = ndims(audio_data) == 1 ? audio_data : audio_data[:, 1]
     signal_fft = fft(signal)
     plot(abs.(signal_fft[20:2000]),)
 end
-
 
 function apply_distortion(signal::Vector{Float64}; drive::Float64=2.0)
     rms_original = sqrt(mean(signal .^ 2))
@@ -72,35 +70,6 @@ function new_audio_path(old_path::String, suffix::String)
 
     return output_path
 end
-
-
-function process_audio_stft(input_path::String, gain_factor=1.0)
-    # Wczytaj dane audio
-    signal, fs = wavread(input_path)
-    signal = ndims(signal) == 1 ? signal : signal[:, 1]  # tylko pierwszy kanał
-    
-    # Parametry STFT
-    frame_size = 1024
-    hop_size = 512
-    window = hanning(frame_size)
-
-    stft_result = stft(signal, frame_size, hop_size, window=window)
-
-    # Modyfikacja widma – przykład: wzmacniamy wszystkie amplitudy
-    #stft_result .*= gain_factor  # lub zastosuj własną funkcję na każdej kolumnie
-
-    # Odwracamy STFT
-    reconstructed = istft(stft_result, window, hop_size)
-
-    # Konwersja na Float32 i zapis
-    reconstructed = Float32.(reconstructed)
-    output_path = new_audio_path(input_path, "_stft")
-    wavwrite(reconstructed, fs, output_path)
-
-    println("Zapisano zmodyfikowany plik do: $output_path")
-end
-
-
 
 function modify_audio(file_path::String, gain::Float64)
     if(file_path[length(file_path)-3:end] != ".wav")
@@ -130,25 +99,7 @@ function modify_audio(file_path::String, gain::Float64)
     
 end
 
-function istft(spectrogram::Matrix{ComplexF64}, window::Vector{Float64}, hop_size::Int)
-    frame_size, num_frames = size(spectrogram)
-    output_length = (num_frames - 1) * hop_size + frame_size
-    signal = zeros(Float64, output_length)
-    window_sum = zeros(Float64, output_length)
 
-    for i in 0:num_frames-1
-        frame = real(ifft(spectrogram[:, i + 1]))
-        range = (i * hop_size + 1):(i * hop_size + frame_size)
-        signal[range] .+= frame .* window
-        window_sum[range] .+= window.^2
-    end
-
-    # Normalizacja (żeby nie przesterować tam, gdzie okna się nakładają)
-    nonzero = window_sum .> 1e-8
-    signal[nonzero] ./= window_sum[nonzero]
-
-    return signal
-end
 
 
 
@@ -169,7 +120,7 @@ function my_stft(signal::Vector{Float64}, frame_size::Int, hop_size::Int)
         stft_matrix[:, i+1] = fft(frame)
     end
 
-    return stft_matrix
+    return stft_matrix, total_length
 end
 
 
@@ -188,7 +139,6 @@ function my_istft(stft_matrix::Matrix{ComplexF64}, frame_size::Int, hop_size::In
         normalization[start:start+frame_size-1] .+= window.^2
     end
 
-    # Zapobieganie dzieleniu przez 0
     normalization .= map(x -> x == 0 ? 1 : x, normalization)
     signal ./= normalization
     return signal
@@ -197,23 +147,35 @@ end
 
 function test_stft(filepath::String; frame_size=1024, hop_size=512)
     y, fs = wavread(filepath)
-    y = vec(y)  # konwersja do 1D (mono)
+
+    # Obsługa stereo i mono
+    if ndims(y) == 2 && size(y, 2) == 2
+        y = mean(y, dims=2)  # uśrednianie kanałów
+        y = vec(y)
+    else
+        y = vec(y)
+    end
+
     y ./= maximum(abs, y)  # normalizacja
 
-    stft_data = my_stft(y, frame_size, hop_size)
+    @info "Oryginalna długość: $(length(y))"
+
+    stft_data, original_len = my_stft(y, frame_size, hop_size)
     reconstructed = my_istft(stft_data, frame_size, hop_size)
 
-    # Przycinanie lub padding
-    reconstructed = reconstructed[1:length(y)]
-    reconstructed ./= maximum(abs, reconstructed)  # ponowna normalizacja
+    reconstructed = reconstructed[1:original_len]
+    reconstructed ./= maximum(abs, reconstructed)
 
-    # Zapis pliku
+    @info "Zrekonstruowana długość: $(length(reconstructed))"
+
     parts = splitext(filepath)
     outname = parts[1] * "_stft" * parts[2]
     wavwrite(reconstructed, outname, Fs=fs)
 
     println("Zapisano wynik do: $outname")
 end
+
+
 
 
 
