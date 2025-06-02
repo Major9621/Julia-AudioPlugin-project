@@ -2,7 +2,7 @@ module AudioPlugin
 
 using FFTW, Plots, DSP, PlutoUI, WAV, FileIO, WebIO, OffsetArrays, Statistics
 
-export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression, test_plot_stft, equalizer_function
+export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression, test_plot_stft, equalizer_function, equalize_audio
 
 
 function visualize_audio(file_path::String)
@@ -35,7 +35,7 @@ function compare_audio_files(path_1::String, path_2::String)
     freqs2, distorted = get_frequency_spectrum(path_2)
 
     p1 = plot(freqs1, original, title="Original", xlabel="Frequency (Hz)", ylabel="Magnitude", xlim=(20, 2000))
-    p2 = plot(freqs2, distorted, title="Distorted", xlabel="Frequency (Hz)", ylabel="Magnitude", xlim=(20, 2000))
+    p2 = plot(freqs2, distorted, title="Modified", xlabel="Frequency (Hz)", ylabel="Magnitude", xlim=(20, 2000))
 
     plot(p1, p2, layout=(2, 1), size=(800, 600))
 end
@@ -295,6 +295,58 @@ function equalizer_function(frequency::Float64, bass_multiplier::Float64, low_mi
     after_equalizer = multiplier_list[idx-1] + (in_between_percentage * (multiplier_list[idx] - multiplier_list[idx-1]))
     return after_equalizer
 end
+
+
+
+function equalize_audio(filepath::String,
+                        bass_multiplier::Float64=1.0,
+                        low_mid_multiplier::Float64=2.0,
+                        high_mid_multiplier::Float64=1.0,
+                        treble_multiplier::Float64=1.0,
+                        frame_size::Int=2048,
+                        hop_size::Int=1024)
+
+    y, fs = wavread(filepath)
+
+    if ndims(y) == 2 && size(y, 2) == 2
+        y = mean(y, dims=2)
+        y = vec(y)
+    else
+        y = vec(y)
+    end
+
+    y ./= maximum(abs, y)
+
+    stft_data, original_len = my_stft(y, frame_size, hop_size)
+
+    # Oblicz odpowiadające częstotliwości dla każdej linii STFT
+    freq_bins = [fs * (k - 1) / frame_size for k in 1:size(stft_data, 1)]
+
+    # Equalizacja — skalowanie magnitudy każdego widma w ramce
+    for (i, f) in enumerate(freq_bins)
+        gain = equalizer_function(Float64(f),
+                        Float64(bass_multiplier),
+                        Float64(low_mid_multiplier),
+                        Float64(high_mid_multiplier),
+                        Float64(treble_multiplier))
+        stft_data[i, :] .*= gain
+    end
+
+    # ISTFT
+    reconstructed = my_istft(stft_data, frame_size, hop_size)
+    reconstructed = reconstructed[1:original_len]
+    reconstructed ./= maximum(abs, reconstructed)
+
+    # Zapis do pliku
+    parts = splitext(filepath)
+    outname = parts[1] * "_equalized" * parts[2]
+    wavwrite(reconstructed, outname, Fs=fs)
+
+    println("Zapisano wynik do: $outname")
+end
+
+
+
 
 
 end # module AudioPlugin

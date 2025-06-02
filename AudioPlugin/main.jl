@@ -29,4 +29,8 @@ end
 
 #AudioPlugin.test_plot_stft(audio_path, 0.6, frame_size=2048, hop_size=1024)
 
-println(AudioPlugin.equalizer_function(2000.0, 1.0, 1.0, 1.0, 1.0))
+#println(AudioPlugin.equalizer_function(2000.0, 1.0, 1.0, 1.0, 1.0))
+
+AudioPlugin.equalize_audio(audio_path, 1.0, 1.0, 4.0, 5.0)
+
+AudioPlugin.compare_audio_files(audio_path, joinpath(audio_dir, "guitar_equalized.wav"))
