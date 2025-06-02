@@ -2,7 +2,7 @@ module AudioPlugin
 
 using FFTW, Plots, DSP, PlutoUI, WAV, FileIO, WebIO, OffsetArrays, Statistics
 
-export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression, test_plot_stft
+export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression, test_plot_stft, equalizer_function
 
 
 function visualize_audio(file_path::String)
@@ -270,7 +270,31 @@ function test_compression(filepath::String; threshold=0.5, ratio=6.0)
 end
 
 
+function equalizer_function(frequency::Float64, bass_multiplier::Float64, low_mid_multiplier::Float64, high_mid_multiplier::Float64, treble_multiplier::Float64)
+    lowest_freq = 20.0
+    center_bassfreq = 80.0
+    center_lowmidfreq = 350.0
+    center_highmidfreq = 1000.0
+    center_trebelfreq = 3500.0
+    highest_freq = 20000.0
 
+    if frequency <= lowest_freq
+        return 0.0
+    elseif frequency >= highest_freq
+        return 0.0
+    end
+
+    multiplier_list = [1.0, bass_multiplier, low_mid_multiplier, high_mid_multiplier, treble_multiplier, 1.0]
+    frequency_list = [lowest_freq, center_bassfreq, center_lowmidfreq, center_highmidfreq, center_trebelfreq, highest_freq]
+    
+    idx = searchsortedlast(frequency_list, frequency) + 1
+    #println("Index: $idx, Frequency: $frequency")
+    #println(frequency_list[idx])
+
+    in_between_percentage = (frequency - frequency_list[idx-1]) / (frequency_list[idx] - frequency_list[idx-1])
+    after_equalizer = multiplier_list[idx-1] + (in_between_percentage * (multiplier_list[idx] - multiplier_list[idx-1]))
+    return after_equalizer
+end
 
 
 end # module AudioPlugin

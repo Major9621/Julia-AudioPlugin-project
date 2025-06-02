@@ -27,4 +27,6 @@ end
 
 #AudioPlugin.visualize_audio(audio_dir * "/guitar_compressed.wav")
 
-AudioPlugin.test_plot_stft(audio_path, 0.6, frame_size=2048, hop_size=1024)
+#AudioPlugin.test_plot_stft(audio_path, 0.6, frame_size=2048, hop_size=1024)
+
+println(AudioPlugin.equalizer_function(2000.0, 1.0, 1.0, 1.0, 1.0))
