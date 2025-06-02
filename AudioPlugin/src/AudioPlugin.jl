@@ -2,7 +2,7 @@ module AudioPlugin
 
 using FFTW, Plots, DSP, PlutoUI, WAV, FileIO, WebIO, OffsetArrays, Statistics
 
-export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression
+export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression, test_plot_stft
 
 
 function visualize_audio(file_path::String)
@@ -201,6 +201,51 @@ function test_stft(filepath::String; frame_size=2048, hop_size=1024) # orygnalni
 
     println("Zapisano wynik do: $outname")
 end
+
+
+
+function plot_stft_frame(stft_matrix::Matrix{ComplexF64}, frame_index::Int, fs::Real)
+    frame = stft_matrix[:, frame_index]
+    magnitudes = abs.(frame)  # amplitudy (moduł liczb zespolonych)
+    
+    # Oś częstotliwości (dla FFT symetrycznej)
+    n = length(frame)
+    freqs = fs * (0:(n-1)) ./ n  # np. 0:22050 Hz jeśli fs=44100 i n=1024
+
+    p = plot(freqs[1:div(n,2)], magnitudes[1:div(n,2)],
+        xlabel="Częstotliwość [Hz]", ylabel="Amplituda",
+        title="Widmo ramki $frame_index", legend=false,
+        xlims=(0, 2000))
+    
+    display(p)
+end
+
+
+
+function test_plot_stft(filepath::String, percent_frame::Float64; frame_size=2048, hop_size=1024)
+    y, fs = wavread(filepath)
+
+    # Obsługa stereo i mono
+    if ndims(y) == 2 && size(y, 2) == 2
+        y = mean(y, dims=2)  # uśrednianie kanałów
+        y = vec(y)
+    else
+        y = vec(y)
+    end
+
+    y ./= maximum(abs, y)  # normalizacja
+
+    stft_data, original_len = my_stft(y, frame_size, hop_size)
+
+
+    n_frames = ceil(Int, (original_len - frame_size) / hop_size) + 1
+    frame_index = ceil(Int, percent_frame * n_frames)
+
+    plot_stft_frame(stft_data, frame_index, fs)
+    println("Wyświetlono ramkę $frame_index z $(n_frames) całkowitych ramek.")
+
+end
+
 
 
 function test_compression(filepath::String; threshold=0.5, ratio=6.0)

@@ -23,6 +23,8 @@ end
 
 #AudioPlugin.test_stft(audio_path)
 
-AudioPlugin.test_compression(audio_path)
+#AudioPlugin.test_compression(audio_path)
 
-AudioPlugin.visualize_audio(audio_dir * "/guitar_compressed.wav")
+#AudioPlugin.visualize_audio(audio_dir * "/guitar_compressed.wav")
+
+AudioPlugin.test_plot_stft(audio_path, 0.6, frame_size=2048, hop_size=1024)
