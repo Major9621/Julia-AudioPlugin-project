@@ -254,7 +254,6 @@ function equalizer_function(frequency::Float64, bass_multiplier::Float64, low_mi
 end
 
 
-
 function equalize_audio_signal(signal::Vector{Float64},
                             fs::Int;
                             bass_multiplier::Float64 = 1.0,
@@ -368,20 +367,20 @@ function custom_distortion(filepath::String, tone:: Float64, level:: Float64, ga
     end
 
     function calculate_equalizer_values(tone::Float64)
-        min_bass = 2.0
-        min_low_mid = 1.6
-        min_high_mid = 0.8
+        min_bass = 4.0
+        min_low_mid = 2.6
+        min_high_mid = 1.5
         min_treble = 0.5
 
         mid_bass = 1.2
-        mid_low_mid = 2.0
-        mid_high_mid = 2.0
+        mid_low_mid = 4.0
+        mid_high_mid = 4.0
         mid_treble = 1.2
 
         max_bass = 0.5
-        max_low_mid = 0.8
-        max_high_mid = 1.6
-        max_treble = 2.0
+        max_low_mid = 1.5
+        max_high_mid = 2.6
+        max_treble = 4.0
 
         if tone <= 0.0
             return min_bass, min_low_mid, min_high_mid, min_treble
@@ -402,15 +401,55 @@ function custom_distortion(filepath::String, tone:: Float64, level:: Float64, ga
         return bass, low_mid, high_mid, treble
     end
 
+    # Wczytaj plik WAV
+    input_signal, fs = wavread(filepath)
+
+    is_stereo = size(input_signal, 2) == 2
+    if is_stereo
+        println("Stereo input detected. Converting to mono...")
+        input_signal = sum(input_signal, dims=2)[:, 1] ./ 2  # mono mixdown
+    else
+        println("Mono input detected.")
+        input_signal = input_signal[:, 1]  # flatten from matrix to vector
+    end
+
+    input_signal ./= maximum(abs, input_signal)  # zabezpieczenie przed clippingiem
+
+    # Kalkulacja parametrów na podstawie pokręteł
     println("Calculating gain multiplier...")
     gain_multiplier = calculate_gain_multiplier(gain)
     println("Gain multiplier: $gain_multiplier")
+
     println("Calculating level multiplier...")
     level_multiplier = calculate_level_multiplier(level)
     println("Level multiplier: $level_multiplier")
+
     println("Calculating equalizer values...")
     bass_multiplier, low_mid_multiplier, high_mid_multiplier, treble_multiplier = calculate_equalizer_values(tone)
     println("Equalizer values: Bass: $bass_multiplier, Low Mid: $low_mid_multiplier, High Mid: $high_mid_multiplier, Treble: $treble_multiplier")
+
+    # Przetwarzanie sygnału
+    println("Applying compression...")
+    compressed = apply_compression_to_signal(input_signal, 0.5, 4.0)
+
+    println("Applying equalization...")
+    equalized = equalize_audio_signal(compressed, Int(fs);
+        bass_multiplier=bass_multiplier,
+        low_mid_multiplier=low_mid_multiplier,
+        high_mid_multiplier=high_mid_multiplier,
+        treble_multiplier=treble_multiplier)
+
+    println("Applying distortion...")
+    distorted = add_gain_to_signal(equalized; drive=gain_multiplier)
+
+    println("Managing final level...")
+    output_signal = distorted .* level_multiplier
+    output_signal ./= maximum(abs, output_signal)  # końcowa normalizacja
+
+    # Zapis pliku
+    out_path = replace(filepath, ".wav" => "_custom-dist.wav")
+    println("Saving output to $out_path")
+    wavwrite(output_signal, fs, out_path)
 end
 
 

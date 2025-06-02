@@ -6,7 +6,7 @@ using .AudioPlugin
 
 
 
-audio_name = "guitar.wav"
+audio_name = "overdriven riff fxoff 02.06.2025.wav"
 audio_dir = "audio"
 audio_path = joinpath(audio_dir, audio_name)
 
@@ -36,5 +36,4 @@ end
 #AudioPlugin.compare_audio_files(audio_path, joinpath(audio_dir, "guitar_equalized.wav"))
 
 
-s = "xd"
-AudioPlugin.custom_distortion(s, 4.0, 5.0, 0.0)
+AudioPlugin.custom_distortion(audio_path, 4.0, 6.0, 5.0)
