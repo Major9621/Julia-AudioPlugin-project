@@ -2,7 +2,7 @@ module AudioPlugin
 
 using FFTW, Plots, DSP, PlutoUI, WAV, FileIO, WebIO, OffsetArrays, Statistics
 
-export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression, test_plot_stft, equalizer_function, equalize_audio
+export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression, test_plot_stft, equalizer_function, equalize_audio, custom_distortion
 
 
 function visualize_audio(file_path::String)
@@ -172,7 +172,7 @@ function my_istft(stft_matrix::Matrix{ComplexF64}, frame_size::Int, hop_size::In
 end
 
 
-function test_stft(filepath::String; frame_size=2048, hop_size=1024) # orygnalnie dwa razy mniejsze, możen się bawić
+function test_stft(filepath::String; frame_size=2048, hop_size=1024) # orygnalnie dwa razy mniejsze, można się bawić
     y, fs = wavread(filepath)
 
     # Obsługa stereo i mono
@@ -345,6 +345,84 @@ function equalize_audio(filepath::String,
     println("Zapisano wynik do: $outname")
 end
 
+
+function custom_distortion(signal:: Vector{Float64}, tone:: Float64, level:: Float64, gain:: Float64)
+    # 5.0 = neutral, 0.0 = minimum, 10.0 = maximum
+
+    function calculate_gain_multiplier(gain::Float64)
+        min_gain = 1.1
+        max_gain = 5.0
+
+        if gain <= 0.0
+            return min_gain
+        elseif gain >= 10.0
+            return max_gain
+        else
+            return min_gain + (max_gain - min_gain) * (gain / 10.0)
+        end
+    end
+
+    function calculate_level_multiplier(level::Float64)
+        min_level = 0.4
+        neutral_level = 1.0
+        max_level = 2.0
+
+        if level <= 0.0
+            return min_level
+        elseif level >= 10.0
+            return max_level
+        elseif level <= 5.0
+            return min_level + (neutral_level - min_level) * (level / 5.0)
+        else
+            return neutral_level + (max_level - neutral_level) * ((level - 5.0) / 5.0)
+        end
+    end
+
+    function calculate_equalizer_values(tone::Float64)
+        min_bass = 2.0
+        min_low_mid = 1.6
+        min_high_mid = 0.8
+        min_treble = 0.5
+
+        mid_bass = 1.2
+        mid_low_mid = 2.0
+        mid_high_mid = 2.0
+        mid_treble = 1.2
+
+        max_bass = 0.5
+        max_low_mid = 0.8
+        max_high_mid = 1.6
+        max_treble = 2.0
+
+        if tone <= 0.0
+            return min_bass, min_low_mid, min_high_mid, min_treble
+        elseif tone >= 10.0
+            return max_bass, max_low_mid, max_high_mid, max_treble
+        elseif tone <= 5.0
+            bass = min_bass + (mid_bass - min_bass) * (tone / 5.0)
+            low_mid = min_low_mid + (mid_low_mid - min_low_mid) * (tone / 5.0)
+            high_mid = min_high_mid + (mid_high_mid - min_high_mid) * (tone / 5.0)
+            treble = min_treble + (mid_treble - min_treble) * (tone / 5.0)
+        else
+            bass = mid_bass + (max_bass - mid_bass) * ((tone - 5.0) / 5.0)
+            low_mid = mid_low_mid + (max_low_mid - mid_low_mid) * ((tone - 5.0) / 5.0)
+            high_mid = mid_high_mid + (max_high_mid - mid_high_mid) * ((tone - 5.0) / 5.0)
+            treble = mid_treble + (max_treble - mid_treble) * ((tone - 5.0) / 5.0)
+        end
+
+        return bass, low_mid, high_mid, treble
+    end
+
+    println("Calculating gain multiplier...")
+    gain_multiplier = calculate_gain_multiplier(gain)
+    println("Gain multiplier: $gain_multiplier")
+    println("Calculating level multiplier...")
+    level_multiplier = calculate_level_multiplier(level)
+    println("Level multiplier: $level_multiplier")
+    println("Calculating equalizer values...")
+    bass_multiplier, low_mid_multiplier, high_mid_multiplier, treble_multiplier = calculate_equalizer_values(tone)
+    println("Equalizer values: Bass: $bass_multiplier, Low Mid: $low_mid_multiplier, High Mid: $high_mid_multiplier, Treble: $treble_multiplier")
+end
 
 
 

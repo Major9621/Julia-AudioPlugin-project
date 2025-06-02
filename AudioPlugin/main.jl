@@ -31,6 +31,10 @@ end
 
 #println(AudioPlugin.equalizer_function(2000.0, 1.0, 1.0, 1.0, 1.0))
 
-AudioPlugin.equalize_audio(audio_path, 1.0, 1.0, 4.0, 5.0)
+#AudioPlugin.equalize_audio(audio_path, 1.0, 1.0, 1.0, 1.0)
 
-AudioPlugin.compare_audio_files(audio_path, joinpath(audio_dir, "guitar_equalized.wav"))
+#AudioPlugin.compare_audio_files(audio_path, joinpath(audio_dir, "guitar_equalized.wav"))
+
+
+dummy_signal = Float64[]
+AudioPlugin.custom_distortion(dummy_signal, 4.0, 5.0, 0.0)
