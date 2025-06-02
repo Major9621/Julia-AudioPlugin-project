@@ -47,17 +47,6 @@ function visualize_frequency_spectrum(file_path::String)
     plot(abs.(signal_fft[20:2000]),)
 end
 
-function apply_distortion(signal::Vector{Float64}; drive::Float64=2.0)
-    rms_original = sqrt(mean(signal .^ 2))
-
-    distorted = tanh.(drive .* signal)
-
-    rms_new = sqrt(mean(distorted .^ 2))
-
-    normalized = distorted .* (rms_original / rms_new)
-
-    return normalized
-end
 
 function new_audio_path(old_path::String, suffix::String)
 
@@ -83,7 +72,7 @@ function modify_audio(file_path::String, gain::Float64)
     #modified_signal = signal .* gain
     #modified_signal = clamp.(modified_signal, -1.0f0, 1.0f0)
 
-    modified_signal = apply_distortion(signal; drive=gain)
+    modified_signal = add_gain_to_signal(signal; drive=gain)
     modified_signal = clamp.(modified_signal, -1.0f0, 1.0f0)
     modified_signal = Float32.(modified_signal)
 
@@ -98,38 +87,6 @@ function modify_audio(file_path::String, gain::Float64)
     println("Zapisano zmodyfikowaną ścieżkę do: $output_path")
     
 end
-
-
-function apply_compression(signal::Vector{Float64}, threshold::Float64, ratio::Float64, attack_coeff=0.01, release_coeff=0.001)
-    compressed_signal = similar(signal)
-    gain = 1.0  # początkowy gain
-    for i in eachindex(signal)
-        sample = signal[i]
-        abs_sample = abs(sample)
-
-        # Oblicz target_gain zależnie od przekroczenia thresholdu
-        if abs_sample > threshold
-            target_gain = threshold + (abs_sample - threshold) / ratio
-            target_gain /= abs_sample  # znormalizowany gain < 1
-        else
-            target_gain = 1.0  # brak kompresji
-        end
-
-        # Wygładzanie gainu
-        if target_gain < gain
-            # Atak: gain spada szybciej
-            gain = (1 - attack_coeff) * gain + attack_coeff * target_gain
-        else
-            # Release: gain rośnie wolniej
-            gain = (1 - release_coeff) * gain + release_coeff * target_gain
-        end
-
-        compressed_signal[i] = sample * gain
-    end
-    compressed_signal = clamp.(compressed_signal, -1.0, 1.0)
-    return compressed_signal
-end
-
 
 
 
@@ -261,7 +218,7 @@ function test_compression(filepath::String; threshold=0.5, ratio=6.0)
 
     y ./= maximum(abs, y)  # normalizacja
 
-    compressed_signal = apply_compression(y, threshold, ratio)
+    compressed_signal = apply_compression_to_signal(y, threshold, ratio)
 
     outname = new_audio_path(filepath, "_compressed")
     wavwrite(compressed_signal, outname, Fs=fs)
@@ -298,55 +255,87 @@ end
 
 
 
-function equalize_audio(filepath::String,
-                        bass_multiplier::Float64=1.0,
-                        low_mid_multiplier::Float64=2.0,
-                        high_mid_multiplier::Float64=1.0,
-                        treble_multiplier::Float64=1.0,
-                        frame_size::Int=2048,
-                        hop_size::Int=1024)
+function equalize_audio_signal(signal::Vector{Float64},
+                            fs::Int;
+                            bass_multiplier::Float64 = 1.0,
+                            low_mid_multiplier::Float64 = 2.0,
+                            high_mid_multiplier::Float64 = 1.0,
+                            treble_multiplier::Float64 = 1.0,
+                            frame_size::Int = 2048,
+                            hop_size::Int = 1024)
 
-    y, fs = wavread(filepath)
+    # Normalizacja
+    signal = copy(signal)  # nie modyfikujemy oryginalnego sygnału
+    signal ./= maximum(abs, signal)
 
-    if ndims(y) == 2 && size(y, 2) == 2
-        y = mean(y, dims=2)
-        y = vec(y)
-    else
-        y = vec(y)
-    end
+    # STFT
+    stft_data, original_len = my_stft(signal, frame_size, hop_size)
 
-    y ./= maximum(abs, y)
-
-    stft_data, original_len = my_stft(y, frame_size, hop_size)
-
-    # Oblicz odpowiadające częstotliwości dla każdej linii STFT
+    # Częstotliwości dla każdego wiersza STFT
     freq_bins = [fs * (k - 1) / frame_size for k in 1:size(stft_data, 1)]
 
-    # Equalizacja — skalowanie magnitudy każdego widma w ramce
+    # Equalizacja
     for (i, f) in enumerate(freq_bins)
         gain = equalizer_function(Float64(f),
-                        Float64(bass_multiplier),
-                        Float64(low_mid_multiplier),
-                        Float64(high_mid_multiplier),
-                        Float64(treble_multiplier))
+                                Float64(bass_multiplier),
+                                Float64(low_mid_multiplier),
+                                Float64(high_mid_multiplier),
+                                Float64(treble_multiplier))
         stft_data[i, :] .*= gain
     end
 
-    # ISTFT
+    # ISTFT i końcowa normalizacja
     reconstructed = my_istft(stft_data, frame_size, hop_size)
     reconstructed = reconstructed[1:original_len]
     reconstructed ./= maximum(abs, reconstructed)
 
-    # Zapis do pliku
-    parts = splitext(filepath)
-    outname = parts[1] * "_equalized" * parts[2]
-    wavwrite(reconstructed, outname, Fs=fs)
-
-    println("Zapisano wynik do: $outname")
+    return reconstructed
 end
 
 
-function custom_distortion(signal:: Vector{Float64}, tone:: Float64, level:: Float64, gain:: Float64)
+function add_gain_to_signal(signal::Vector{Float64}; drive::Float64=2.0)
+    rms_original = sqrt(mean(signal .^ 2))
+
+    distorted = tanh.(drive .* signal)
+
+    rms_new = sqrt(mean(distorted .^ 2))
+
+    normalized = distorted .* (rms_original / rms_new)
+
+    return normalized
+end
+
+function apply_compression_to_signal(signal::Vector{Float64}, threshold::Float64, ratio::Float64, attack_coeff=0.01, release_coeff=0.001)
+    compressed_signal = similar(signal)
+    gain = 1.0  # początkowy gain
+    for i in eachindex(signal)
+        sample = signal[i]
+        abs_sample = abs(sample)
+
+        # Oblicz target_gain zależnie od przekroczenia thresholdu
+        if abs_sample > threshold
+            target_gain = threshold + (abs_sample - threshold) / ratio
+            target_gain /= abs_sample  # znormalizowany gain < 1
+        else
+            target_gain = 1.0  # brak kompresji
+        end
+
+        # Wygładzanie gainu
+        if target_gain < gain
+            # Atak: gain spada szybciej
+            gain = (1 - attack_coeff) * gain + attack_coeff * target_gain
+        else
+            # Release: gain rośnie wolniej
+            gain = (1 - release_coeff) * gain + release_coeff * target_gain
+        end
+
+        compressed_signal[i] = sample * gain
+    end
+    compressed_signal = clamp.(compressed_signal, -1.0, 1.0)
+    return compressed_signal
+end
+
+function custom_distortion(filepath::String, tone:: Float64, level:: Float64, gain:: Float64)
     # 5.0 = neutral, 0.0 = minimum, 10.0 = maximum
 
     function calculate_gain_multiplier(gain::Float64)

@@ -36,5 +36,5 @@ end
 #AudioPlugin.compare_audio_files(audio_path, joinpath(audio_dir, "guitar_equalized.wav"))
 
 
-dummy_signal = Float64[]
-AudioPlugin.custom_distortion(dummy_signal, 4.0, 5.0, 0.0)
+s = "xd"
+AudioPlugin.custom_distortion(s, 4.0, 5.0, 0.0)
