@@ -2,7 +2,7 @@ module AudioPlugin
 
 using FFTW, Plots, DSP, PlutoUI, WAV, FileIO, WebIO, OffsetArrays, Statistics
 
-export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression, test_plot_stft, equalizer_function, equalize_audio, custom_distortion
+export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_plot_stft, custom_distortion
 
 
 function visualize_audio(file_path::String)
@@ -15,14 +15,14 @@ function visualize_audio(file_path::String)
 end
 
 function get_frequency_spectrum(file_path::String)
-    audio_data, fs = wavread(file_path)
+    audio_data, fs = wavread(file_path) # Wczytaj dane audio i częstotliwość próbkowania
     signal = ndims(audio_data) == 1 ? audio_data : audio_data[:, 1]
 
     N = length(signal)
-    signal_fft = fft(signal)
+    signal_fft = fft(signal) # Oblicz FFT sygnału
     magnitudes = abs.(signal_fft)[1:div(N, 2)]
     freqs = (0:div(N, 2)-1) .* fs / N 
-
+    
     return freqs, magnitudes
 end
 
@@ -43,13 +43,12 @@ end
 function visualize_frequency_spectrum(file_path::String)
     audio_data = wavread(file_path)
     signal = ndims(audio_data) == 1 ? audio_data : audio_data[:, 1]
-    signal_fft = fft(signal)
+    signal_fft = fft(signal)   # wykres FFT pliku audio
     plot(abs.(signal_fft[20:2000]),)
 end
 
-
 function new_audio_path(old_path::String, suffix::String)
-
+    # Dopisujemy końcówkę do nazwy pliku
     if(old_path[length(old_path)-3:end] != ".wav")
         error("Plik musi być w formacie WAV")
     end
@@ -59,36 +58,6 @@ function new_audio_path(old_path::String, suffix::String)
 
     return output_path
 end
-
-function modify_audio(file_path::String, gain::Float64)
-    if(file_path[length(file_path)-3:end] != ".wav")
-        error("Plik musi być w formacie WAV")
-    end
-
-
-    audio_data, samplerate = wavread(file_path)
-    signal = ndims(audio_data) == 1 ? audio_data : audio_data[:, 1]
-
-    #modified_signal = signal .* gain
-    #modified_signal = clamp.(modified_signal, -1.0f0, 1.0f0)
-
-    modified_signal = add_gain_to_signal(signal; drive=gain)
-    modified_signal = clamp.(modified_signal, -1.0f0, 1.0f0)
-    modified_signal = Float32.(modified_signal)
-
-    # Zapis
-    output_path = new_audio_path(file_path, "_modified")
-
-    if isfile(output_path)
-        rm(output_path) # Usuń plik, jeśli istnieje
-    end
-
-    wavwrite(modified_signal, output_path, Fs=samplerate)
-    println("Zapisano zmodyfikowaną ścieżkę do: $output_path")
-    
-end
-
-
 
 function my_stft(signal::Vector{Float64}, frame_size::Int, hop_size::Int)
     window = hann(frame_size)
@@ -106,8 +75,6 @@ function my_stft(signal::Vector{Float64}, frame_size::Int, hop_size::Int)
 
     return stft_matrix, total_length
 end
-
-
 
 function my_istft(stft_matrix::Matrix{ComplexF64}, frame_size::Int, hop_size::Int)
     n_frames = size(stft_matrix, 2)
@@ -128,46 +95,13 @@ function my_istft(stft_matrix::Matrix{ComplexF64}, frame_size::Int, hop_size::In
     return signal
 end
 
-
-function test_stft(filepath::String; frame_size=2048, hop_size=1024) # orygnalnie dwa razy mniejsze, można się bawić
-    y, fs = wavread(filepath)
-
-    # Obsługa stereo i mono
-    if ndims(y) == 2 && size(y, 2) == 2
-        y = mean(y, dims=2)  # uśrednianie kanałów
-        y = vec(y)
-    else
-        y = vec(y)
-    end
-
-    y ./= maximum(abs, y)  # normalizacja
-
-    @info "Oryginalna długość: $(length(y))"
-
-    stft_data, original_len = my_stft(y, frame_size, hop_size)
-    reconstructed = my_istft(stft_data, frame_size, hop_size)
-
-    reconstructed = reconstructed[1:original_len]
-    reconstructed ./= maximum(abs, reconstructed)
-
-    @info "Zrekonstruowana długość: $(length(reconstructed))"
-
-    parts = splitext(filepath)
-    outname = parts[1] * "_stft" * parts[2]
-    wavwrite(reconstructed, outname, Fs=fs)
-
-    println("Zapisano wynik do: $outname")
-end
-
-
-
 function plot_stft_frame(stft_matrix::Matrix{ComplexF64}, frame_index::Int, fs::Real)
     frame = stft_matrix[:, frame_index]
     magnitudes = abs.(frame)  # amplitudy (moduł liczb zespolonych)
     
     # Oś częstotliwości (dla FFT symetrycznej)
     n = length(frame)
-    freqs = fs * (0:(n-1)) ./ n  # np. 0:22050 Hz jeśli fs=44100 i n=1024
+    freqs = fs * (0:(n-1)) ./ n
 
     p = plot(freqs[1:div(n,2)], magnitudes[1:div(n,2)],
         xlabel="Częstotliwość [Hz]", ylabel="Amplituda",
@@ -176,8 +110,6 @@ function plot_stft_frame(stft_matrix::Matrix{ComplexF64}, frame_index::Int, fs::
     
     display(p)
 end
-
-
 
 function test_plot_stft(filepath::String, percent_frame::Float64; frame_size=2048, hop_size=1024)
     y, fs = wavread(filepath)
@@ -197,34 +129,13 @@ function test_plot_stft(filepath::String, percent_frame::Float64; frame_size=204
 
     n_frames = ceil(Int, (original_len - frame_size) / hop_size) + 1
     frame_index = ceil(Int, percent_frame * n_frames)
-
+    # Wykres ramki STFT (częstotliwości w danym oknie czasowym)
     plot_stft_frame(stft_data, frame_index, fs)
     println("Wyświetlono ramkę $frame_index z $(n_frames) całkowitych ramek.")
 
 end
 
 
-
-function test_compression(filepath::String; threshold=0.5, ratio=6.0)
-    y, fs = wavread(filepath)
-
-    # Obsługa stereo i mono
-    if ndims(y) == 2 && size(y, 2) == 2
-        y = mean(y, dims=2)  # uśrednianie kanałów
-        y = vec(y)
-    else
-        y = vec(y)
-    end
-
-    y ./= maximum(abs, y)  # normalizacja
-
-    compressed_signal = apply_compression_to_signal(y, threshold, ratio)
-
-    outname = new_audio_path(filepath, "_compressed")
-    wavwrite(compressed_signal, outname, Fs=fs)
-
-    println("Zapisano wynik do: $outname")
-end
 
 
 function equalizer_function(frequency::Float64, bass_multiplier::Float64, low_mid_multiplier::Float64, high_mid_multiplier::Float64, treble_multiplier::Float64)
@@ -235,24 +146,26 @@ function equalizer_function(frequency::Float64, bass_multiplier::Float64, low_mi
     center_trebelfreq = 3500.0
     highest_freq = 20000.0
 
+    # Sprawdzenie, czy częstotliwość jest poza zakresem
     if frequency <= lowest_freq
         return 0.0
     elseif frequency >= highest_freq
         return 0.0
     end
 
+    # Lista częstotliwości i odpowiadających im mnożników
     multiplier_list = [1.0, bass_multiplier, low_mid_multiplier, high_mid_multiplier, treble_multiplier, 1.0]
     frequency_list = [lowest_freq, center_bassfreq, center_lowmidfreq, center_highmidfreq, center_trebelfreq, highest_freq]
     
+    # binary search O(nlogn)
     idx = searchsortedlast(frequency_list, frequency) + 1
-    #println("Index: $idx, Frequency: $frequency")
-    #println(frequency_list[idx])
 
+    # Wyliczamy jak przemnożona powinna być dana częstotliwość w zależności od tego
+    # jak się plasuje na funkcji equzlizującej
     in_between_percentage = (frequency - frequency_list[idx-1]) / (frequency_list[idx] - frequency_list[idx-1])
     after_equalizer = multiplier_list[idx-1] + (in_between_percentage * (multiplier_list[idx] - multiplier_list[idx-1]))
     return after_equalizer
 end
-
 
 function equalize_audio_signal(signal::Vector{Float64},
                             fs::Int;
@@ -291,7 +204,6 @@ function equalize_audio_signal(signal::Vector{Float64},
     return reconstructed
 end
 
-
 function add_gain_to_signal(signal::Vector{Float64}; drive::Float64=2.0)
     rms_original = sqrt(mean(signal .^ 2))
 
@@ -321,10 +233,10 @@ function apply_compression_to_signal(signal::Vector{Float64}, threshold::Float64
 
         # Wygładzanie gainu
         if target_gain < gain
-            # Atak: gain spada szybciej
+            # Atak:
             gain = (1 - attack_coeff) * gain + attack_coeff * target_gain
         else
-            # Release: gain rośnie wolniej
+            # Release:
             gain = (1 - release_coeff) * gain + release_coeff * target_gain
         end
 
@@ -337,6 +249,8 @@ end
 function custom_distortion(filepath::String, tone:: Float64, level:: Float64, gain:: Float64)
     # 5.0 = neutral, 0.0 = minimum, 10.0 = maximum
 
+
+    # Funkcje pomocnicze do zamiany parametrów Distortion na wartości dla przetwarzania audio
     function calculate_gain_multiplier(gain::Float64)
         min_gain = 1.1
         max_gain = 5.0
@@ -401,21 +315,21 @@ function custom_distortion(filepath::String, tone:: Float64, level:: Float64, ga
         return bass, low_mid, high_mid, treble
     end
 
-    # Wczytaj plik WAV
+    # Wczytywanie audio z WAV
     input_signal, fs = wavread(filepath)
 
     is_stereo = size(input_signal, 2) == 2
     if is_stereo
         println("Stereo input detected. Converting to mono...")
-        input_signal = sum(input_signal, dims=2)[:, 1] ./ 2  # mono mixdown
+        input_signal = sum(input_signal, dims=2)[:, 1] ./ 2 
     else
         println("Mono input detected.")
-        input_signal = input_signal[:, 1]  # flatten from matrix to vector
+        input_signal = input_signal[:, 1]
     end
 
     input_signal ./= maximum(abs, input_signal)  # zabezpieczenie przed clippingiem
 
-    # Kalkulacja parametrów na podstawie pokręteł
+    # Kalkulacja parametrów na podstawie potencjometrów
     println("Calculating gain multiplier...")
     gain_multiplier = calculate_gain_multiplier(gain)
     println("Gain multiplier: $gain_multiplier")
@@ -447,7 +361,7 @@ function custom_distortion(filepath::String, tone:: Float64, level:: Float64, ga
     output_signal ./= maximum(abs, output_signal)  # końcowa normalizacja
 
     # Zapis pliku
-    out_path = replace(filepath, ".wav" => "_custom-dist.wav")
+    out_path = new_audio_path(filepath, "_custom-dist")
     println("Saving output to $out_path")
     wavwrite(output_signal, fs, out_path)
 end
