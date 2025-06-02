@@ -2,7 +2,7 @@ module AudioPlugin
 
 using FFTW, Plots, DSP, PlutoUI, WAV, FileIO, WebIO, OffsetArrays, Statistics
 
-export visualize_audio, visualize_frequency_spectrum, modify_audio, compare_audio_files, test_stft
+export visualize_audio, visualize_frequency_spectrum, compare_audio_files, test_stft, test_compression
 
 
 function visualize_audio(file_path::String)
@@ -100,8 +100,35 @@ function modify_audio(file_path::String, gain::Float64)
 end
 
 
+function apply_compression(signal::Vector{Float64}, threshold::Float64, ratio::Float64, attack_coeff=0.01, release_coeff=0.001)
+    compressed_signal = similar(signal)
+    gain = 1.0  # początkowy gain
+    for i in eachindex(signal)
+        sample = signal[i]
+        abs_sample = abs(sample)
 
+        # Oblicz target_gain zależnie od przekroczenia thresholdu
+        if abs_sample > threshold
+            target_gain = threshold + (abs_sample - threshold) / ratio
+            target_gain /= abs_sample  # znormalizowany gain < 1
+        else
+            target_gain = 1.0  # brak kompresji
+        end
 
+        # Wygładzanie gainu
+        if target_gain < gain
+            # Atak: gain spada szybciej
+            gain = (1 - attack_coeff) * gain + attack_coeff * target_gain
+        else
+            # Release: gain rośnie wolniej
+            gain = (1 - release_coeff) * gain + release_coeff * target_gain
+        end
+
+        compressed_signal[i] = sample * gain
+    end
+    compressed_signal = clamp.(compressed_signal, -1.0, 1.0)
+    return compressed_signal
+end
 
 
 
@@ -145,7 +172,7 @@ function my_istft(stft_matrix::Matrix{ComplexF64}, frame_size::Int, hop_size::In
 end
 
 
-function test_stft(filepath::String; frame_size=1024, hop_size=512)
+function test_stft(filepath::String; frame_size=2048, hop_size=1024) # orygnalnie dwa razy mniejsze, możen się bawić
     y, fs = wavread(filepath)
 
     # Obsługa stereo i mono
@@ -176,8 +203,26 @@ function test_stft(filepath::String; frame_size=1024, hop_size=512)
 end
 
 
+function test_compression(filepath::String; threshold=0.5, ratio=6.0)
+    y, fs = wavread(filepath)
 
+    # Obsługa stereo i mono
+    if ndims(y) == 2 && size(y, 2) == 2
+        y = mean(y, dims=2)  # uśrednianie kanałów
+        y = vec(y)
+    else
+        y = vec(y)
+    end
 
+    y ./= maximum(abs, y)  # normalizacja
+
+    compressed_signal = apply_compression(y, threshold, ratio)
+
+    outname = new_audio_path(filepath, "_compressed")
+    wavwrite(compressed_signal, outname, Fs=fs)
+
+    println("Zapisano wynik do: $outname")
+end
 
 
 

@@ -19,10 +19,10 @@ end
 
 #AudioPlugin.visualize_frequency_spectrum(audio_path)
 
-#AudioPlugin.modify_audio(audio_path, 200.0)
-#AudioPlugin.process_audio_stft(audio_path)
-
 #AudioPlugin.compare_audio_files(audio_path, joinpath(audio_dir, "guitar_modified.wav"))
 
-AudioPlugin.test_stft(audio_path)
+#AudioPlugin.test_stft(audio_path)
 
+AudioPlugin.test_compression(audio_path)
+
+AudioPlugin.visualize_audio(audio_dir * "/guitar_compressed.wav")
